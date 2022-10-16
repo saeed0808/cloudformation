@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  
+  ## Security group for WebInstance enabling port 80 and 22 from all IP addresses
+  WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Web server
+      GroupName: web     
+      VpcId: vpc-0313e9c34ece73f28
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+ 
+  ## EC2 Instance with a custom security group
+  ## and a larger root instance device
+  ## and an externally created EBS volume attached
+  WebInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      BlockDeviceMappings:
+        -
+          DeviceName: "/dev/sda1"
+          Ebs:
+            VolumeSize: 10
+            VolumeType: gp2
+      InstanceType: t2.micro
+      ImageId: ami-0e7e134863fac4946
+      KeyName: my-key
+      Monitoring: true
+      SecurityGroupIds:
+        - !Ref WebSecurityGroup
+      SubnetId: subnet-0e344bd2a8859db1e
+      UserData: !Base64 |
+          #!/bin/bash
+          sudo dnf install -y httpd -qq
+          sudo dnf install -y git -qq
+          sudo dnf install -y php-{common,gmp,fpm,curl,intl,pdo,mbstring,gd,xml,cli,zip,mysqli} -qq
+          sudo systemctl restart php-fpm -qq
+          sudo systemctl restart httpd -qq
+          crontab -l > mycron; echo "0 0 * * Mon /bin/sh -c 'cd /var/www/html/repo && /usr/bin/git pull -q origin master'" >> mycron; crontab mycron; rm -rf mycron; sudo setenforce 0
+      Tags:
+        -
+          Key: Name
+          Value: webserver-
+
+  DBJUMPInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      BlockDeviceMappings:
+        -
+          DeviceName: "/dev/sda1"
+          Ebs:
+            VolumeSize: 10
+            VolumeType: gp2
+      InstanceType: t2.micro
+      ImageId: ami-0e7e134863fac4946
+      KeyName: my-key
+      Monitoring: true
+      SecurityGroupIds:
+        - !Ref WebSecurityGroup
+      SubnetId: subnet-0e344bd2a8859db1e
+      UserData: !Base64 |
+          #!/bin/bash
+          sudo dnf install -y mysql-server -qq
+          sudo systemctl start mysqld.service -qq
+          sudo systemctl enable mysqld.service -qq
+      Tags:
+        -
+          Key: Name
+          Value: db-jump
